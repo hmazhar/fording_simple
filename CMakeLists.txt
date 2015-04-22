@@ -116,6 +116,8 @@ MESSAGE(STATUS "ChronoVehicle libraries: ${CHRONOVEHICLE_LIBRARIES}")
 # Dependencies for ChronoEngine_OpenGL
 # ------------------------------------------------------------------------------
 
+SET(BLAZE_DIR ""  CACHE PATH   "Where is Blaze located?")
+
 OPTION(ENABLE_OPENGL false)
 
 IF (ENABLE_OPENGL)
@@ -188,6 +190,7 @@ INCLUDE_DIRECTORIES(
     "${CMAKE_BINARY_DIR}/demos_vehicle/"
     #${GLFW_INCLUDE_DIR}
     ${THRUST_INCLUDE_DIR}
+    ${BLAZE_DIR}
     )
 
 SET(LIBRARIES
