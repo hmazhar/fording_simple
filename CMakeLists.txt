@@ -32,7 +32,7 @@ SET(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
 # ------------------------------------------------------------------------------
 # Find the ChronoEngine library
 # ------------------------------------------------------------------------------
-add_definitions(-DTHRUST_DEVICE_SYSTEM=THRUST_DEVICE_SYSTEM_OMP)
+
 
 FIND_PACKAGE(ChronoEngine)
 
@@ -70,13 +70,6 @@ ENDIF()
 IF(CHRONOPARALLEL_LIBRARY_RELEASE)
   MESSAGE(STATUS "ChronoParallel library (release) found")
 ENDIF()
-IF(CHRONOPARALLEL_OPENGL_LIBRARY_DEBUG)
-  MESSAGE(STATUS "ChronoParallel OpenGL library (debug) found")
-ENDIF()
-IF(CHRONOPARALLEL_OPENGL_LIBRARY_RELEASE)
-  MESSAGE(STATUS "ChronoParallel OpenGL library (release) found")
-ENDIF()
-
 
 # Stop now if the path to the Chrono SDK is invalid or if we could not find
 # at least one of the debug or release Chrono libraries.
@@ -88,10 +81,7 @@ IF(NOT CHRONOPARALLEL_LIBRARY_DEBUG AND NOT CHRONOPARALLEL_LIBRARY_RELEASE)
   MESSAGE(FATAL_ERROR "Cannot find the ChronoEngine library. Check CHRONOPARALLEL_LIBRARY_DEBUG and CHRONOPARALLEL_LIBRARY_RELEASE.")
   RETURN()
 ENDIF()
-IF(NOT CHRONOPARALLEL_OPENGL_LIBRARY_DEBUG AND NOT CHRONOPARALLEL_OPENGL_LIBRARY_RELEASE)
-  MESSAGE(FATAL_ERROR "Cannot find the ChronoEngine library. Check CHRONOPARALLEL_OPENGL_LIBRARY_DEBUG and CHRONOPARALLEL_OPENGL_LIBRARY_RELEASE.")
-  RETURN()
-ENDIF()
+
 # Add paths to Chrono headers
 INCLUDE_DIRECTORIES(${CHRONOENGINE_INCLUDES})
 
@@ -156,14 +146,19 @@ ENDIF()
 # ------------------------------------------------------------------------------
 # Find CUDA
 # ------------------------------------------------------------------------------
-enable_cuda_support()
+#enable_cuda_support()
 # ------------------------------------------------------------------------------
 # Enable OpenMP
 # ------------------------------------------------------------------------------
 enable_openmp_support()
 
-FIND_PACKAGE(GLM)
-FIND_PACKAGE(GLFW)
+# ------------------------------------------------------------------------------
+# Thrust
+# ------------------------------------------------------------------------------
+find_package(Thrust)
+
+#Without the following define, thrust needs the cuda sdk to compile
+add_definitions(-DTHRUST_DEVICE_SYSTEM=THRUST_DEVICE_SYSTEM_OMP)
 
 #--------------------------------------------------------------
 # Generate the configuration file 
@@ -191,7 +186,7 @@ INCLUDE_DIRECTORIES(
     "${CH_PARALLEL_LIBDIR_RELEASE}/../" 
     "${CUDA_TOOLKIT_ROOT_DIR}/include"
     "${CMAKE_BINARY_DIR}/demos_vehicle/"
-    ${GLFW_INCLUDE_DIR}
+    #${GLFW_INCLUDE_DIR}
     )
 
 SET(LIBRARIES
