@@ -62,7 +62,7 @@ find_package(ZLIB)
 # Find the ChronoParallel library
 # ------------------------------------------------------------------------------
 
-FIND_PACKAGE(ChronoParallel COMPONENTS opengl utils)
+FIND_PACKAGE(ChronoParallel COMPONENTS utils)
 
 IF(CHRONOPARALLEL_LIBRARY_DEBUG)
   MESSAGE(STATUS "ChronoParallel library (debug) found")
