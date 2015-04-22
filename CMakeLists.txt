@@ -187,6 +187,7 @@ INCLUDE_DIRECTORIES(
     "${CUDA_TOOLKIT_ROOT_DIR}/include"
     "${CMAKE_BINARY_DIR}/demos_vehicle/"
     #${GLFW_INCLUDE_DIR}
+    ${THRUST_INCLUDE_DIR}
     )
 
 SET(LIBRARIES
