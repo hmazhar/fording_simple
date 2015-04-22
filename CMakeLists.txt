@@ -126,7 +126,7 @@ MESSAGE(STATUS "ChronoVehicle libraries: ${CHRONOVEHICLE_LIBRARIES}")
 # Dependencies for ChronoEngine_OpenGL
 # ------------------------------------------------------------------------------
 
-OPTION(ENABLE_OPENGL true)
+OPTION(ENABLE_OPENGL false)
 
 IF (ENABLE_OPENGL)
     find_package(OpenGL)
@@ -198,7 +198,7 @@ SET(LIBRARIES
     ${CHRONOENGINE_LIBRARY}
     ${CHRONOPARALLEL_LIBRARY}
     ${CHRONOPARALLEL_UTILS_LIBRARY}
-    ${CHRONOPARALLEL_OPENGL_LIBRARY}
+#    ${CHRONOPARALLEL_OPENGL_LIBRARY}
     ${CHRONOVEHICLE_LIBRARIES}
     )
 
