@@ -302,13 +302,18 @@ int main(int argc, char* argv[]) {
 // #endif
 
    while (time < time_end) {
-     //TimingOutput(system);
-
-     //vehicle.m_vehicle->GetChassis()->Empty_forces_accumulators();
+    
+    //vehicle.m_vehicle->GetChassis()->Empty_forces_accumulators();
     // [force, point applied, false=in global frame]
-     //vehicle.m_vehicle->GetChassis()->Accumulate_force(ChVector<>(frc.x,frc.y,frc.z), ChVector<>(cpt.x,cpt.y,cpt.z), false);
+    //vehicle.m_vehicle->GetChassis()->Accumulate_force(ChVector<>(frc.x,frc.y,frc.z), ChVector<>(cpt.x,cpt.y,cpt.z), false);
+    //ChVector<> position = vehicle.m_vehicle->GetChassis()->GetPos();
+    //ChVector velocity =   vehicle.m_vehicle->GetChassis()->GetPos_dt();
+    //ChQuaternion<> rotation = vehicle.m_vehicle->GetChassis()->GetRot();
+    //ChVector<> omega = vehicle.m_vehicle->GetChassis()->GetWvel_loc();
+    //For the wheels do this: index 0, 1, 2,3 for the 4 wheels, 
+    //  vehicle.m_vehicle->GetWheelBody(0)->GetPos();
 
-     system->DoStepDynamics(time_step);
+    system->DoStepDynamics(time_step);
 
 
      vehicle.Update(time);
