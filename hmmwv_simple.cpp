@@ -283,32 +283,42 @@ int main(int argc, char* argv[]) {
   int next_out_frame = 0;
   double exec_time = 0;
   int num_contacts = 0;
-#ifdef CHRONO_PARALLEL_HAS_OPENGL
-  // Initialize OpenGL
-  opengl::ChOpenGLWindow& gl_window = opengl::ChOpenGLWindow::getInstance();
-  gl_window.Initialize(1280, 720, "Fording Simulation", system);
-  gl_window.SetCamera(ChVector<>(0, -10, 0), ChVector<>(0, 0, 0), ChVector<>(0, 0, 1), 0.1f);
-  gl_window.Pause();
+// #ifdef CHRONO_PARALLEL_HAS_OPENGL
+//   // Initialize OpenGL
+//   opengl::ChOpenGLWindow& gl_window = opengl::ChOpenGLWindow::getInstance();
+//   gl_window.Initialize(1280, 720, "Fording Simulation", system);
+//   gl_window.SetCamera(ChVector<>(0, -10, 0), ChVector<>(0, 0, 0), ChVector<>(0, 0, 1), 0.1f);
+//   gl_window.Pause();
 
-  while (gl_window.Active()) {
-    if (gl_window.DoStepDynamics(time_step)) {
-      vehicle.Update(time);
-      time += time_step;
-    }
-    gl_window.Render();
-  }
-  exit(0);
+//   while (gl_window.Active()) {
+//     if (gl_window.DoStepDynamics(time_step)) {
+//       vehicle.Update(time);
+//       time += time_step;
+//     }
+//     gl_window.Render();
+//   }
+//   exit(0);
 
-#endif
+// #endif
 
-  //  while (time < time_end) {
-  //    TimingOutput(system);
-  //    system->DoStepDynamics(time_step);
-  //    vehicle.Update(time);
-  //    // Update counters.
-  //    time += time_step;
-  //    sim_frame++;
-  //    exec_time += system->GetTimerStep();
-  //  }
+   while (time < time_end) {
+     //TimingOutput(system);
+
+     //vehicle.m_vehicle->GetChassis()->Empty_forces_accumulators();
+    // [force, point applied, false=in global frame]
+     //vehicle.m_vehicle->GetChassis()->Accumulate_force(ChVector<>(frc.x,frc.y,frc.z), ChVector<>(cpt.x,cpt.y,cpt.z), false);
+
+     system->DoStepDynamics(time_step);
+
+
+     vehicle.Update(time);
+     // Update counters.
+
+     std::cout<<"time: "<<time<<std::endl;
+
+     time += time_step;
+     sim_frame++;
+     exec_time += system->GetTimerStep();
+   }
   return 0;
 }
