@@ -41,7 +41,7 @@ using std::endl;
 // =============================================================================
 
 // JSON file for vehicle model
-std::string vehicle_file("hmmwv/vehicle/HMMWV_Vehicle.json");
+std::string vehicle_file("hmmwv/vehicle/HMMWV_Vehicle_4WD.json");
 
 // JSON files for powertrain (simple)
 std::string simplepowertrain_file("hmmwv/powertrain/HMMWV_SimplePowertrain.json");
@@ -188,7 +188,7 @@ void MyVehicle::Update(double time) {
 
 void SetupSystem(ChSystem* system) {
   system->Set_G_acc(ChVector<>(0, 0, -9.81));
-  omp_set_num_threads(2);
+  omp_set_num_threads(1);
   system->SetIntegrationType(ChSystem::INT_ANITESCU);
   system->SetLcpSolverType(ChSystem::LCP_ITERATIVE_SOR);
   system->SetIterLCPmaxItersSpeed(150);
