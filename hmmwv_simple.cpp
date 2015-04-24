@@ -2,39 +2,23 @@
 #include <vector>
 #include <cmath>
 #include <string>
+#include <sstream>
 
 #include "core/ChFileutils.h"
 #include "core/ChStream.h"
 #include "collision/ChCConvexDecomposition.h"
-
-#include "chrono_parallel/physics/ChSystemParallel.h"
-#include "chrono_parallel/lcp/ChLcpSystemDescriptorParallel.h"
-#include "chrono_parallel/collision/ChCNarrowphaseRUtils.h"
-
-#include "chrono_utils/ChUtilsGeometry.h"
-#include "chrono_utils/ChUtilsCreators.h"
-#include "chrono_utils/ChUtilsInputOutput.h"
-#include "chrono_utils/ChUtilsGenerators.h"
-#include "chrono_utils/ChUtilsVehicle.h"
+#include "collision/ChCCollisionModel.h"
+#include "geometry/ChCTriangleMeshConnected.h"
+#include "assets/ChTriangleMeshShape.h"
+#include "assets/ChCylinderShape.h"
+#include "assets/ChBoxShape.h"
+#include "physics/ChSystem.h"
 
 #include "config.h"
 #include "subsys/ChVehicleModelData.h"
 #include "subsys/vehicle/Vehicle.h"
 #include "subsys/powertrain/SimplePowertrain.h"
 
-//#include "input_output.h"
-
-//#undef CHRONO_PARALLEL_HAS_OPENGL
-
-//#define FILLING
-#ifdef CHRONO_PARALLEL_HAS_OPENGL
-#include "chrono_opengl/ChOpenGLWindow.h"
-#endif
-
-using namespace chrono;
-using namespace chrono::collision;
-using namespace chrono::geometry;
-using namespace chrono::utils;
 using std::cout;
 using std::endl;
 
@@ -81,53 +65,182 @@ int out_fps = 60;
 
 // Continuous loop (only if OpenGL available)
 bool loop = false;
-ChSharedPtr<ChBody> chassisBody;
+chrono::ChSharedPtr<chrono::ChBody> chassisBody;
 
 // fluid body radius
 double fluid_r = 0.0175;
 
 // Container dimensions
-const real conversion = .3048;  // meters per foot
+const double conversion = .3048;  // meters per foot
 // note that when specifying dimensions for the geometry half lengths are used.
-real dim_a = 28.5 * conversion * 0.5;  // length of end platforms
-real dim_b = 5 * conversion * 0.5;     // length of slope at top
-real dim_c = 12 * conversion * 0.5;    // length of submerged slope default: 48.5
-real dim_d = 15 * conversion * 0.5;    // length of bottom default: 100
-real dim_e = 8 * conversion * 0.5;     // full depth of trench
-real dim_w = 14 * conversion * 0.5;    // width of trench default: 20
-real dim_t = 5.0 / 12.0 * conversion;  // wall thickness default : 10
+double dim_a = 28.5 * conversion * 0.5;  // length of end platforms
+double dim_b = 5 * conversion * 0.5;     // length of slope at top
+double dim_c = 12 * conversion * 0.5;    // length of submerged slope default: 48.5
+double dim_d = 15 * conversion * 0.5;    // length of bottom default: 100
+double dim_e = 8 * conversion * 0.5;     // full depth of trench
+double dim_w = 14 * conversion * 0.5;    // width of trench default: 20
+double dim_t = 5.0 / 12.0 * conversion;  // wall thickness default : 10
 
 // Initial vehicle position and orientation
-ChVector<> initLoc(-(dim_d + (dim_b + dim_c) * 2 + dim_a), 0, dim_e * 2 + 0.8);
-ChQuaternion<> initRot(1, 0, 0, 0);
+chrono::ChVector<> initLoc(-(dim_d + (dim_b + dim_c) * 2 + dim_a), 0, dim_e * 2 + 0.8);
+chrono::ChQuaternion<> initRot(1, 0, 0, 0);
 
 // Variables that store convex meshes for reuse
-ChConvexDecompositionHACDv2 lugged_convex;
-ChTriangleMeshConnected lugged_mesh;
+chrono::collision::ChConvexDecompositionHACDv2 lugged_convex;
+chrono::geometry::ChTriangleMeshConnected lugged_mesh;
 
 // =============================================================================
 
 class MyVehicle {
  public:
-  MyVehicle(ChSystem* system);
+  MyVehicle(chrono::ChSystem* system);
 
   void Update(double time);
 
-  ChSharedPtr<Vehicle> m_vehicle;
-  ChSharedPtr<SimplePowertrain> m_powertrain;
-  ChTireForces m_tire_forces;
+  chrono::ChSharedPtr<chrono::Vehicle> m_vehicle;
+  chrono::ChSharedPtr<chrono::SimplePowertrain> m_powertrain;
+  chrono::ChTireForces m_tire_forces;
 };
 
-MyVehicle::MyVehicle(ChSystem* system) {
+void LoadConvexMesh(const std::string& file_name,
+                    chrono::geometry::ChTriangleMeshConnected& convex_mesh,
+                    chrono::collision::ChConvexDecompositionHACDv2& convex_shape,
+                    const chrono::ChVector<>& pos = chrono::ChVector<>(0, 0, 0),
+                    const chrono::ChQuaternion<>& rot = chrono::ChQuaternion<>(1, 0, 0, 0),
+                    int hacd_maxhullcount = 1024,
+                    int hacd_maxhullmerge = 256,
+                    int hacd_maxhullvertexes = 64,
+                    double hacd_concavity = 0.01,
+                    double hacd_smallclusterthreshold = 0.0,
+                    double hacd_fusetolerance = 1e-6) {
+  convex_mesh.LoadWavefrontMesh(file_name, true, false);
+
+  for (int i = 0; i < convex_mesh.m_vertices.size(); i++) {
+    convex_mesh.m_vertices[i] = pos + rot.Rotate(convex_mesh.m_vertices[i]);
+  }
+
+  convex_shape.Reset();
+  convex_shape.AddTriangleMesh(convex_mesh);
+  convex_shape.SetParameters(hacd_maxhullcount, hacd_maxhullmerge, hacd_maxhullvertexes, hacd_concavity,
+                             hacd_smallclusterthreshold, hacd_fusetolerance);
+  convex_shape.ComputeConvexDecomposition();
+}
+
+void AddConvexCollisionModel(chrono::ChSharedPtr<chrono::ChBody> body,
+                             chrono::geometry::ChTriangleMeshConnected& convex_mesh,
+                             chrono::collision::ChConvexDecompositionHACDv2& convex_shape,
+                             const chrono::ChVector<>& pos = chrono::ChVector<>(0, 0, 0),
+                             const chrono::ChQuaternion<>& rot = chrono::ChQuaternion<>(1, 0, 0, 0),
+                             bool use_original_asset = true) {
+  chrono::collision::ChConvexDecomposition* used_decomposition = &convex_shape;
+
+  int hull_count = used_decomposition->GetHullCount();
+
+  for (int c = 0; c < hull_count; c++) {
+    std::vector<chrono::ChVector<double> > convexhull;
+    used_decomposition->GetConvexHullResult(c, convexhull);
+
+    ((chrono::collision::ChCollisionModel*)body->GetCollisionModel())->AddConvexHull(convexhull, pos, rot);
+    // Add each convex chunk as a new asset
+    if (!use_original_asset) {
+      std::stringstream ss;
+      ss << convex_mesh.GetFileName() << "_" << c;
+      chrono::geometry::ChTriangleMeshConnected trimesh_convex;
+      used_decomposition->GetConvexHullResult(c, trimesh_convex);
+
+      chrono::ChSharedPtr<chrono::ChTriangleMeshShape> trimesh_shape(new chrono::ChTriangleMeshShape);
+      trimesh_shape->SetMesh(trimesh_convex);
+      trimesh_shape->SetName(ss.str());
+      trimesh_shape->Pos = pos;
+      trimesh_shape->Rot = rot;
+      body->GetAssets().push_back(trimesh_shape);
+    }
+  }
+  // Add the original triangle mesh as asset
+  if (use_original_asset) {
+    chrono::ChSharedPtr<chrono::ChTriangleMeshShape> trimesh_shape(new chrono::ChTriangleMeshShape);
+    trimesh_shape->SetMesh(convex_mesh);
+    trimesh_shape->SetName(convex_mesh.GetFileName());
+    trimesh_shape->Pos = chrono::VNULL;
+    trimesh_shape->Rot = chrono::QUNIT;
+    body->GetAssets().push_back(trimesh_shape);
+  }
+}
+
+void AddCylinderGeometry(chrono::ChBody* body,
+                         double radius,
+                         double hlen,
+                         const chrono::ChVector<>& pos = chrono::ChVector<>(0, 0, 0),
+                         const chrono::ChQuaternion<>& rot = chrono::ChQuaternion<>(1, 0, 0, 0),
+                         bool visualization = true) {
+  body->GetCollisionModel()->AddCylinder(radius, radius, hlen, pos, rot);
+
+  if (visualization) {
+    chrono::ChSharedPtr<chrono::ChCylinderShape> cylinder(new chrono::ChCylinderShape);
+    cylinder->GetCylinderGeometry().rad = radius;
+    cylinder->GetCylinderGeometry().p1 = chrono::ChVector<>(0, hlen, 0);
+    cylinder->GetCylinderGeometry().p2 = chrono::ChVector<>(0, -hlen, 0);
+    cylinder->Pos = pos;
+    cylinder->Rot = rot;
+    body->GetAssets().push_back(cylinder);
+  }
+}
+
+void AddBoxGeometry(chrono::ChBody* body,
+                    const chrono::ChVector<>& size,
+                    const chrono::ChVector<>& pos = chrono::ChVector<>(0, 0, 0),
+                    const chrono::ChQuaternion<>& rot = chrono::ChQuaternion<>(1, 0, 0, 0),
+                    bool visualization = true) {
+  body->GetCollisionModel()->AddBox(size.x, size.y, size.z, pos, rot);
+
+  if (visualization) {
+    chrono::ChSharedPtr<chrono::ChBoxShape> box(new chrono::ChBoxShape);
+    box->GetBoxGeometry().Size = size;
+    box->Pos = pos;
+    box->Rot = rot;
+    body->GetAssets().push_back(box);
+  }
+}
+
+void InitializeObject(chrono::ChSharedPtr<chrono::ChBody> body,
+                      double mass,
+                      chrono::ChSharedPtr<chrono::ChMaterialSurfaceBase> mat,
+                      const chrono::ChVector<>& pos = chrono::ChVector<>(0, 0, 0),
+                      const chrono::ChQuaternion<>& rot = chrono::ChQuaternion<>(1, 0, 0, 0),
+                      bool collide = true,
+                      bool fixed = false,
+                      int collision_family = 2,
+                      int do_not_collide_with = 4) {
+  body->SetMass(mass);
+  body->SetPos(pos);
+  body->SetRot(rot);
+  body->SetCollide(collide);
+  body->SetBodyFixed(fixed);
+  body->SetMaterialSurface(mat);
+  body->GetCollisionModel()->ClearModel();
+  body->GetCollisionModel()->SetFamily(collision_family);
+  body->GetCollisionModel()->SetFamilyMaskNoCollisionWithFamily(do_not_collide_with);
+}
+
+void FinalizeObject(chrono::ChSharedPtr<chrono::ChBody> body, chrono::ChSystem* system) {
+  // Infer system type and contact method.
+  chrono::ChBody::ContactMethod contact_method = body->GetContactMethod();
+  body->GetCollisionModel()->BuildModel();
+  system->AddBody(body);
+}
+
+MyVehicle::MyVehicle(chrono::ChSystem* system) {
   // Create and initialize the vehicle system
-  LoadConvexMesh(vehicle::GetDataFile(lugged_file), lugged_mesh, lugged_convex);
+  LoadConvexMesh(chrono::vehicle::GetDataFile(lugged_file), lugged_mesh, lugged_convex);
   printf("Wheel Hulls: %d\n", lugged_convex.GetHullCount());
 
-  m_vehicle = ChSharedPtr<Vehicle>(new Vehicle(system, vehicle::GetDataFile(vehicle_file)));
-  m_vehicle->Initialize(ChCoordsys<>(initLoc, initRot));
+  m_vehicle =
+      chrono::ChSharedPtr<chrono::Vehicle>(new chrono::Vehicle(system, chrono::vehicle::GetDataFile(vehicle_file)));
+  m_vehicle->Initialize(chrono::ChCoordsys<>(initLoc, initRot));
 
   // Create and initialize the powertrain system
-  m_powertrain = ChSharedPtr<SimplePowertrain>(new SimplePowertrain(vehicle::GetDataFile(simplepowertrain_file)));
+  m_powertrain = chrono::ChSharedPtr<chrono::SimplePowertrain>(
+      new chrono::SimplePowertrain(chrono::vehicle::GetDataFile(simplepowertrain_file)));
   m_powertrain->Initialize();
 
   // Add contact geometry to the vehicle wheel bodies
@@ -138,13 +251,13 @@ MyVehicle::MyVehicle(ChSystem* system) {
     double radius = m_vehicle->GetWheel(i)->GetRadius();
     double width = m_vehicle->GetWheel(i)->GetWidth();
 
-    ChSharedPtr<ChBody> wheelBody = m_vehicle->GetWheelBody(i);
+    chrono::ChSharedPtr<chrono::ChBody> wheelBody = m_vehicle->GetWheelBody(i);
     wheelBody->GetAssets().clear();
 
     wheelBody->GetCollisionModel()->ClearModel();
     for (int j = 0; j < 15; j++) {
-      AddConvexCollisionModel(wheelBody, lugged_mesh, lugged_convex, VNULL,
-                              Q_from_AngAxis(j * 24 * CH_C_DEG_TO_RAD, VECT_Y), false);
+      AddConvexCollisionModel(wheelBody, lugged_mesh, lugged_convex, chrono::VNULL,
+                              chrono::Q_from_AngAxis(j * 24 * chrono::CH_C_DEG_TO_RAD, chrono::VECT_Y), false);
     }
     // This cylinder acts like the rims
     AddCylinderGeometry(wheelBody.get_ptr(), 0.223, 0.126);
@@ -161,9 +274,9 @@ MyVehicle::MyVehicle(ChSystem* system) {
   // use rigid contact for tire-terrain interaction, these are always zero.
   m_tire_forces.resize(numWheels);
 
-  ChSharedPtr<ChBody> chassisBody = m_vehicle->GetChassis();
+  chrono::ChSharedPtr<chrono::ChBody> chassisBody = m_vehicle->GetChassis();
   for (int i = 0; i < chassisBody->GetAssets().size(); i++) {
-    ((ChVisualization*)chassisBody->GetAssets().at(i).get_ptr())->Pos = ChVector<>(0);
+    ((chrono::ChVisualization*)chassisBody->GetAssets().at(i).get_ptr())->Pos = chrono::ChVector<>(0);
   }
   chassisBody->SetCollide(false);
 }
@@ -186,72 +299,77 @@ void MyVehicle::Update(double time) {
   m_vehicle->Update(time, steering, braking, m_powertrain->GetOutputTorque(), m_tire_forces);
 }
 
-void SetupSystem(ChSystem* system) {
-  system->Set_G_acc(ChVector<>(0, 0, -9.81));
-  omp_set_num_threads(1);
-  system->SetIntegrationType(ChSystem::INT_ANITESCU);
-  system->SetLcpSolverType(ChSystem::LCP_ITERATIVE_SOR);
+void SetupSystem(chrono::ChSystem* system) {
+  system->Set_G_acc(chrono::ChVector<>(0, 0, -9.81));
+  system->SetIntegrationType(chrono::ChSystem::INT_ANITESCU);
+  system->SetLcpSolverType(chrono::ChSystem::LCP_ITERATIVE_SOR);
   system->SetIterLCPmaxItersSpeed(150);
   system->SetIterLCPmaxItersStab(150);
   system->SetMaxPenetrationRecoverySpeed(4.0);
 }
 
-void CreateContainer(ChSystem* system) {
-  real dim_slope = sqrt(dim_e * dim_e + (dim_b + dim_c) * (dim_b + dim_c));
-  real angle = atan(dim_e / (dim_b + dim_c));
-  real width = dim_w + dim_t * 2.0;
+void CreateContainer(chrono::ChSystem* system) {
+  double dim_slope = sqrt(dim_e * dim_e + (dim_b + dim_c) * (dim_b + dim_c));
+  double angle = atan(dim_e / (dim_b + dim_c));
+  double width = dim_w + dim_t * 2.0;
 
-  real container_friction = 1;
+  double container_friction = 1;
 
-  ChSharedBodyPtr bottom_plate = ChSharedBodyPtr(new ChBody());
-  ChSharedBodyPtr side_plate_1 = ChSharedBodyPtr(new ChBody());
-  ChSharedBodyPtr side_plate_2 = ChSharedBodyPtr(new ChBody());
-  ChSharedBodyPtr end_plate_1 = ChSharedBodyPtr(new ChBody());
-  ChSharedBodyPtr end_plate_2 = ChSharedBodyPtr(new ChBody());
-  ChSharedBodyPtr end_slope_1 = ChSharedBodyPtr(new ChBody());
-  ChSharedBodyPtr end_slope_2 = ChSharedBodyPtr(new ChBody());
+  chrono::ChSharedBodyPtr bottom_plate = chrono::ChSharedBodyPtr(new chrono::ChBody());
+  chrono::ChSharedBodyPtr side_plate_1 = chrono::ChSharedBodyPtr(new chrono::ChBody());
+  chrono::ChSharedBodyPtr side_plate_2 = chrono::ChSharedBodyPtr(new chrono::ChBody());
+  chrono::ChSharedBodyPtr end_plate_1 = chrono::ChSharedBodyPtr(new chrono::ChBody());
+  chrono::ChSharedBodyPtr end_plate_2 = chrono::ChSharedBodyPtr(new chrono::ChBody());
+  chrono::ChSharedBodyPtr end_slope_1 = chrono::ChSharedBodyPtr(new chrono::ChBody());
+  chrono::ChSharedBodyPtr end_slope_2 = chrono::ChSharedBodyPtr(new chrono::ChBody());
 
-  ChSharedPtr<ChMaterialSurface> material = ChSharedPtr<ChMaterialSurface>(new ChMaterialSurface);
+  chrono::ChSharedPtr<chrono::ChMaterialSurface> material =
+      chrono::ChSharedPtr<chrono::ChMaterialSurface>(new chrono::ChMaterialSurface);
   material->SetFriction(container_friction);
 
-  Vector c_pos = VNULL;
-  InitializeObject(bottom_plate, 1, material, VNULL + c_pos, QUNIT, true, true, 2, 2);
-  InitializeObject(side_plate_1, 1, material, VNULL + c_pos, QUNIT, true, true, 2, 2);
-  InitializeObject(side_plate_2, 1, material, VNULL + c_pos, QUNIT, true, true, 2, 2);
-  InitializeObject(end_plate_1, 1, material, VNULL + c_pos, QUNIT, true, true, 2, 2);
-  InitializeObject(end_plate_2, 1, material, VNULL + c_pos, QUNIT, true, true, 2, 2);
-  InitializeObject(end_slope_1, 1, material, VNULL + c_pos, QUNIT, true, true, 2, 2);
-  InitializeObject(end_slope_2, 1, material, VNULL + c_pos, QUNIT, true, true, 2, 2);
+  chrono::ChVector<> c_pos = chrono::VNULL;
+  InitializeObject(bottom_plate, 1, material, chrono::VNULL + c_pos, chrono::QUNIT, true, true, 2, 2);
+  InitializeObject(side_plate_1, 1, material, chrono::VNULL + c_pos, chrono::QUNIT, true, true, 2, 2);
+  InitializeObject(side_plate_2, 1, material, chrono::VNULL + c_pos, chrono::QUNIT, true, true, 2, 2);
+  InitializeObject(end_plate_1, 1, material, chrono::VNULL + c_pos, chrono::QUNIT, true, true, 2, 2);
+  InitializeObject(end_plate_2, 1, material, chrono::VNULL + c_pos, chrono::QUNIT, true, true, 2, 2);
+  InitializeObject(end_slope_1, 1, material, chrono::VNULL + c_pos, chrono::QUNIT, true, true, 2, 2);
+  InitializeObject(end_slope_2, 1, material, chrono::VNULL + c_pos, chrono::QUNIT, true, true, 2, 2);
 
   // Bottom plate
-  AddBoxGeometry(bottom_plate.get_ptr(), Vector(dim_d * 1.1, width * 1.1, dim_t), VNULL, QUNIT);
+  AddBoxGeometry(bottom_plate.get_ptr(), chrono::ChVector<>(dim_d * 1.1, width * 1.1, dim_t), chrono::VNULL,
+                 chrono::QUNIT);
   // Side walls
-  AddBoxGeometry(side_plate_1.get_ptr(), Vector(dim_d + (dim_b + dim_c + dim_a) * 2, dim_t, dim_e * 2 + dim_t * 2),
-                 Vector(0, +(dim_w + dim_t), dim_e * 2), QUNIT);
-  AddBoxGeometry(side_plate_2.get_ptr(), Vector(dim_d + (dim_b + dim_c + dim_a) * 2, dim_t, dim_e * 2 + dim_t * 2),
-                 Vector(0, -(dim_w + dim_t), dim_e * 2), QUNIT);
+  AddBoxGeometry(side_plate_1.get_ptr(),
+                 chrono::ChVector<>(dim_d + (dim_b + dim_c + dim_a) * 2, dim_t, dim_e * 2 + dim_t * 2),
+                 chrono::ChVector<>(0, +(dim_w + dim_t), dim_e * 2), chrono::QUNIT);
+  AddBoxGeometry(side_plate_2.get_ptr(),
+                 chrono::ChVector<>(dim_d + (dim_b + dim_c + dim_a) * 2, dim_t, dim_e * 2 + dim_t * 2),
+                 chrono::ChVector<>(0, -(dim_w + dim_t), dim_e * 2), chrono::QUNIT);
   // End Platforms
-  AddBoxGeometry(end_plate_1.get_ptr(), Vector(dim_a, width, dim_t),
-                 Vector(+(dim_d + dim_c * 2 + dim_b * 2 + dim_a), 0, dim_e * 2.0), QUNIT);
-  AddBoxGeometry(end_plate_2.get_ptr(), Vector(dim_a, width, dim_t),
-                 Vector(-(dim_d + dim_c * 2 + dim_b * 2 + dim_a), 0, dim_e * 2.0), QUNIT);
+  AddBoxGeometry(end_plate_1.get_ptr(), chrono::ChVector<>(dim_a, width, dim_t),
+                 chrono::ChVector<>(+(dim_d + dim_c * 2 + dim_b * 2 + dim_a), 0, dim_e * 2.0), chrono::QUNIT);
+  AddBoxGeometry(end_plate_2.get_ptr(), chrono::ChVector<>(dim_a, width, dim_t),
+                 chrono::ChVector<>(-(dim_d + dim_c * 2 + dim_b * 2 + dim_a), 0, dim_e * 2.0), chrono::QUNIT);
   // Slopes
-  AddBoxGeometry(end_slope_1.get_ptr(), Vector(dim_slope, dim_w + dim_t * 2.0, dim_t),
-                 Vector(+(dim_d + (dim_c + dim_b) + sin(angle) * dim_t * 0.5), 0, dim_e),
-                 Q_from_AngAxis(-angle, VECT_Y));
-  AddBoxGeometry(end_slope_2.get_ptr(), Vector(dim_slope, dim_w + dim_t * 2.0, dim_t),
-                 Vector(-(dim_d + (dim_c + dim_b) + sin(angle) * dim_t * 0.5), 0, dim_e),
-                 Q_from_AngAxis(+angle, VECT_Y));
+  AddBoxGeometry(end_slope_1.get_ptr(), chrono::ChVector<>(dim_slope, dim_w + dim_t * 2.0, dim_t),
+                 chrono::ChVector<>(+(dim_d + (dim_c + dim_b) + sin(angle) * dim_t * 0.5), 0, dim_e),
+                 chrono::Q_from_AngAxis(-angle, chrono::VECT_Y));
+  AddBoxGeometry(end_slope_2.get_ptr(), chrono::ChVector<>(dim_slope, dim_w + dim_t * 2.0, dim_t),
+                 chrono::ChVector<>(-(dim_d + (dim_c + dim_b) + sin(angle) * dim_t * 0.5), 0, dim_e),
+                 chrono::Q_from_AngAxis(+angle, chrono::VECT_Y));
 
   // Top
-  AddBoxGeometry(bottom_plate.get_ptr(), Vector(dim_d + (dim_b + dim_c + dim_a) * 2, width, dim_t),
-                 Vector(0, 0, dim_e * 4 + dim_t * 2.0), QUNIT);
+  AddBoxGeometry(bottom_plate.get_ptr(), chrono::ChVector<>(dim_d + (dim_b + dim_c + dim_a) * 2, width, dim_t),
+                 chrono::ChVector<>(0, 0, dim_e * 4 + dim_t * 2.0), chrono::QUNIT);
 
   // End Caps
-  AddBoxGeometry(end_plate_1.get_ptr(), Vector(dim_t, width, dim_e + dim_t * 2.0),
-                 Vector(+(dim_d + dim_c * 2 + dim_b * 2 + dim_a * 2), 0, dim_e * 3.0 + dim_t), QUNIT);
-  AddBoxGeometry(end_plate_2.get_ptr(), Vector(dim_t, width, dim_e + dim_t * 2.0),
-                 Vector(-(dim_d + dim_c * 2 + dim_b * 2 + dim_a * 2), 0, dim_e * 3.0 + dim_t), QUNIT);
+  AddBoxGeometry(end_plate_1.get_ptr(), chrono::ChVector<>(dim_t, width, dim_e + dim_t * 2.0),
+                 chrono::ChVector<>(+(dim_d + dim_c * 2 + dim_b * 2 + dim_a * 2), 0, dim_e * 3.0 + dim_t),
+                 chrono::QUNIT);
+  AddBoxGeometry(end_plate_2.get_ptr(), chrono::ChVector<>(dim_t, width, dim_e + dim_t * 2.0),
+                 chrono::ChVector<>(-(dim_d + dim_c * 2 + dim_b * 2 + dim_a * 2), 0, dim_e * 3.0 + dim_t),
+                 chrono::QUNIT);
 
   FinalizeObject(bottom_plate, system);
   FinalizeObject(side_plate_1, system);
@@ -264,10 +382,10 @@ void CreateContainer(ChSystem* system) {
 // =============================================================================
 int main(int argc, char* argv[]) {
   // Set path to ChronoVehicle data files
-  vehicle::SetDataPath(CHRONOVEHICLE_DATA_DIR);
+  chrono::vehicle::SetDataPath(CHRONOVEHICLE_DATA_DIR);
 
   // Create system.
-  ChSystem* system = new ChSystem();
+  chrono::ChSystem* system = new chrono::ChSystem();
   SetupSystem(system);
   // Create the container for vehicle
   CreateContainer(system);
@@ -283,47 +401,30 @@ int main(int argc, char* argv[]) {
   int next_out_frame = 0;
   double exec_time = 0;
   int num_contacts = 0;
-// #ifdef CHRONO_PARALLEL_HAS_OPENGL
-//   // Initialize OpenGL
-//   opengl::ChOpenGLWindow& gl_window = opengl::ChOpenGLWindow::getInstance();
-//   gl_window.Initialize(1280, 720, "Fording Simulation", system);
-//   gl_window.SetCamera(ChVector<>(0, -10, 0), ChVector<>(0, 0, 0), ChVector<>(0, 0, 1), 0.1f);
-//   gl_window.Pause();
 
-//   while (gl_window.Active()) {
-//     if (gl_window.DoStepDynamics(time_step)) {
-//       vehicle.Update(time);
-//       time += time_step;
-//     }
-//     gl_window.Render();
-//   }
-//   exit(0);
-
-// #endif
-
-   while (time < time_end) {
-    
-    //vehicle.m_vehicle->GetChassis()->Empty_forces_accumulators();
+  while (time < time_end) {
+    // vehicle.m_vehicle->GetChassis()->Empty_forces_accumulators();
     // [force, point applied, false=in global frame]
-    //vehicle.m_vehicle->GetChassis()->Accumulate_force(ChVector<>(frc.x,frc.y,frc.z), ChVector<>(cpt.x,cpt.y,cpt.z), false);
-    //ChVector<> position = vehicle.m_vehicle->GetChassis()->GetPos();
-    //ChVector velocity =   vehicle.m_vehicle->GetChassis()->GetPos_dt();
-    //ChQuaternion<> rotation = vehicle.m_vehicle->GetChassis()->GetRot();
-    //ChVector<> omega = vehicle.m_vehicle->GetChassis()->GetWvel_loc();
-    //For the wheels do this: index 0, 1, 2,3 for the 4 wheels, 
+    // vehicle.m_vehicle->GetChassis()->Accumulate_force(chrono::ChVector<>(frc.x,frc.y,frc.z),
+    // chrono::ChVector<>(cpt.x,cpt.y,cpt.z),
+    // false);
+    // chrono::ChVector<> position = vehicle.m_vehicle->GetChassis()->GetPos();
+    // chrono::ChVector velocity =   vehicle.m_vehicle->GetChassis()->GetPos_dt();
+    // chrono::ChQuaternion<> rotation = vehicle.m_vehicle->GetChassis()->GetRot();
+    // chrono::ChVector<> omega = vehicle.m_vehicle->GetChassis()->GetWvel_loc();
+    // For the wheels do this: index 0, 1, 2,3 for the 4 wheels,
     //  vehicle.m_vehicle->GetWheelBody(0)->GetPos();
 
     system->DoStepDynamics(time_step);
 
+    vehicle.Update(time);
+    // Update counters.
 
-     vehicle.Update(time);
-     // Update counters.
+    std::cout << "time: " << time << " N Contacts" << system->GetNcontacts() << std::endl;
 
-     std::cout<<"time: "<<time<<std::endl;
-
-     time += time_step;
-     sim_frame++;
-     exec_time += system->GetTimerStep();
-   }
+    time += time_step;
+    sim_frame++;
+    exec_time += system->GetTimerStep();
+  }
   return 0;
 }

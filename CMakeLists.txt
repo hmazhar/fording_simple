@@ -58,29 +58,6 @@ ENDIF()
 INCLUDE_DIRECTORIES(${CHRONOENGINE_INCLUDES})
 
 find_package(ZLIB)
-# ------------------------------------------------------------------------------
-# Find the ChronoParallel library
-# ------------------------------------------------------------------------------
-
-FIND_PACKAGE(ChronoParallel COMPONENTS utils)
-
-IF(CHRONOPARALLEL_LIBRARY_DEBUG)
-  MESSAGE(STATUS "ChronoParallel library (debug) found")
-ENDIF()
-IF(CHRONOPARALLEL_LIBRARY_RELEASE)
-  MESSAGE(STATUS "ChronoParallel library (release) found")
-ENDIF()
-
-# Stop now if the path to the Chrono SDK is invalid or if we could not find
-# at least one of the debug or release Chrono libraries.
-IF(NOT EXISTS "${CH_PARALLEL_SDKDIR}/chrono_parallel/physics/ChSystemParallel.h")
-  MESSAGE(FATAL_ERROR "Cannot find the Chrono Parallel SDK. Make sure CH_PARALLEL_SDKDIR is set correctly.")
-  RETURN()
-ENDIF()
-IF(NOT CHRONOPARALLEL_LIBRARY_DEBUG AND NOT CHRONOPARALLEL_LIBRARY_RELEASE)
-  MESSAGE(FATAL_ERROR "Cannot find the ChronoEngine library. Check CHRONOPARALLEL_LIBRARY_DEBUG and CHRONOPARALLEL_LIBRARY_RELEASE.")
-  RETURN()
-ENDIF()
 
 # Add paths to Chrono headers
 INCLUDE_DIRECTORIES(${CHRONOENGINE_INCLUDES})
@@ -112,55 +89,6 @@ ENDIF()
 MESSAGE(STATUS "ChronoVehicle includes:  ${CHRONOVEHICLE_INCLUDES}")
 MESSAGE(STATUS "ChronoVehicle libraries: ${CHRONOVEHICLE_LIBRARIES}")
 
-# ------------------------------------------------------------------------------
-# Dependencies for ChronoEngine_OpenGL
-# ------------------------------------------------------------------------------
-
-SET(BLAZE_DIR ""  CACHE PATH   "Where is Blaze located?")
-
-OPTION(ENABLE_OPENGL false)
-
-IF (ENABLE_OPENGL)
-    find_package(OpenGL)
-    find_package(GLM)
-    find_package(GLEW)
-    find_package(GLFW)
-
-    # On windows, ask for the GLEW and GLFW DLLs so that we can copy. This is
-    # optional.  If not specified, it is the user's responsibility to make them
-    # available at runtime.
-    IF(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
-        SET(GLEW_DLL  "" CACHE FILEPATH "The GLEW DLL")
-        SET(GLFW_DLL  "" CACHE FILEPATH "The GLFW DLL")
-    ENDIF()
-
-    # If all dependencies are available, enable building OpenGL support.
-    IF(OPENGL_FOUND AND GLM_FOUND AND GLEW_FOUND AND GLFW_FOUND)
-        SET(CHRONO_PARALLEL_HAS_OPENGL "#define CHRONO_PARALLEL_HAS_OPENGL")
-        SET(ENABLE_OPENGL ON)
-    ELSE()
-        # Unable to find everything, turn off OpenGL
-        MESSAGE("Cannot build ChronoEngine_OpenGL (missing dependencies).")
-        SET(CHRONO_PARALLEL_HAS_OPENGL "")
-        SET(ENABLE_OPENGL OFF)
-    ENDIF()
-ENDIF()
-# ------------------------------------------------------------------------------
-# Find CUDA
-# ------------------------------------------------------------------------------
-#enable_cuda_support()
-# ------------------------------------------------------------------------------
-# Enable OpenMP
-# ------------------------------------------------------------------------------
-enable_openmp_support()
-
-# ------------------------------------------------------------------------------
-# Thrust
-# ------------------------------------------------------------------------------
-find_package(Thrust)
-
-#Without the following define, thrust needs the cuda sdk to compile
-add_definitions(-DTHRUST_DEVICE_SYSTEM=THRUST_DEVICE_SYSTEM_OMP)
 
 #--------------------------------------------------------------
 # Generate the configuration file 
@@ -183,34 +111,15 @@ INCLUDE_DIRECTORIES(
     ${CMAKE_SOURCE_DIR}
     ${CMAKE_BINARY_DIR}
     ${CHRONOENGINE_INCLUDES}
-    ${CHRONOPARALLEL_INCLUDES}
     ${CHRONOVEHICLE_INCLUDES}
-    "${CH_PARALLEL_LIBDIR_RELEASE}/../" 
     "${CUDA_TOOLKIT_ROOT_DIR}/include"
     "${CMAKE_BINARY_DIR}/demos_vehicle/"
-    #${GLFW_INCLUDE_DIR}
-    ${THRUST_INCLUDE_DIR}
-    ${BLAZE_DIR}
     )
 
 SET(LIBRARIES
     ${CHRONOENGINE_LIBRARY}
-    ${CHRONOPARALLEL_LIBRARY}
-    ${CHRONOPARALLEL_UTILS_LIBRARY}
-#    ${CHRONOPARALLEL_OPENGL_LIBRARY}
     ${CHRONOVEHICLE_LIBRARIES}
     )
-
-IF (ENABLE_OPENGL)
-    INCLUDE_DIRECTORIES(
-        ${GLM_INCLUDE_DIRS}
-        ${GLEW_INCLUDE_DIR}
-        ${GLFW_INCLUDE_DIR}
-        )
-
-    SET(LIBRARIES ${LIBRARIES} ${CHRONOPARALLEL_OPENGL_LIBRARY} ${ZLIB_LIBRARY})
-ENDIF()
-
 # ------------------------------------------------------------------------------
 # Automatically copy DLLs 
 IF(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
