@@ -73,7 +73,7 @@ double fluid_r = 0.0175;
 // Container dimensions
 const double conversion = .3048;  // meters per foot
 // note that when specifying dimensions for the geometry half lengths are used.
-double dim_a = 28.5 * conversion * 0.5;  // length of end platforms
+double dim_a = 16 * conversion * 0.5;  // length of end platforms default : 28.5
 double dim_b = 5 * conversion * 0.5;     // length of slope at top
 double dim_c = 12 * conversion * 0.5;    // length of submerged slope default: 48.5
 double dim_d = 15 * conversion * 0.5;    // length of bottom default: 100
@@ -82,7 +82,7 @@ double dim_w = 14 * conversion * 0.5;    // width of trench default: 20
 double dim_t = 5.0 / 12.0 * conversion;  // wall thickness default : 10
 
 // Initial vehicle position and orientation
-chrono::ChVector<> initLoc(-(dim_d + (dim_b + dim_c) * 2 + dim_a), 0, dim_e * 2 + 0.8);
+chrono::ChVector<> initLoc(-(dim_d + (dim_b + dim_c) * 2 + dim_a * .9), 0, dim_e * 2 + 0.65);
 chrono::ChQuaternion<> initRot(1, 0, 0, 0);
 
 // Variables that store convex meshes for reuse
@@ -287,10 +287,15 @@ void MyVehicle::Update(double time) {
   double steering = 0;
   double braking = 0;
 
-  if (time > 0.5)
-    throttle = 1.0 * .25;
-  else if (time > 0.25)
-    throttle = 4 * (time - 0.25) * .25;
+  // if (time > 0.5)
+  //   throttle = 1.0 * .25;
+  // else if (time > 0.25)
+  //   throttle = 4 * (time - 0.25) * .25;
+
+  if (time > 0.1) {
+    throttle = 1;
+  }
+  std::cout << "Vehicle Speed:   " << m_vehicle->GetVehicleSpeed() << std::endl;
 
   // Update the powertrain system
   m_powertrain->Update(time, throttle, m_vehicle->GetDriveshaftSpeed());
